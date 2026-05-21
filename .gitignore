@@ -1,0 +1,24 @@
+node_modules/
+dist/
+build/
+.codex/temp/
+
+# Other
+.DS_Store
+thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.tgz
+.node_repl_history
+.npm
+*.pid
+*.pid.lock
+*.seed
+.yalc
