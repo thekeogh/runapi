@@ -1,13 +1,15 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileSearch, Play, Zap } from 'lucide-react';
+import { ArgsEditor } from './components/ArgsEditor';
 import { AutocompleteInput } from './components/AutocompleteInput';
 import { EditorPane } from './components/EditorPane';
 import { ResultPane } from './components/ResultPane';
+import { SignatureHint } from './components/SignatureHint';
 import { TopPane } from './components/TopPane';
 import { postJson } from './lib/api';
 import { executeInNode } from './lib/executeInNode';
-import type { EnvMode, InspectExport, LogEntry, RunEvent, RunnerMode, RunState, SuggestResult } from './lib/types';
+import type { EnvMode, InspectExport, LogEntry, RunEvent, RunnerMode, RunState, SignatureInfo, SignatureResult, SuggestResult } from './lib/types';
 
 const billingRoot = '/Users/keogh/Sites/screencloud/billing/beta/pulse-backend-keogh/services/billing';
 
@@ -82,6 +84,9 @@ export function App() {
   const [inspecting, setInspecting] = useState(false);
   const [serviceSuggestions, setServiceSuggestions] = useState<string[]>([]);
   const [fileSuggestions, setFileSuggestions] = useState<string[]>([]);
+  const [signatures, setSignatures] = useState<SignatureInfo[]>([]);
+  const [signatureError, setSignatureError] = useState<string | null>(null);
+  const [signatureLoading, setSignatureLoading] = useState(false);
   const [editorWidth, setEditorWidth] = useState(58);
   const [resultTopHeight, setResultTopHeight] = useState(50);
   const workspaceRef = useRef<HTMLElement | null>(null);
@@ -206,6 +211,53 @@ export function App() {
       window.clearTimeout(timeout);
     };
   }, [envMode, serviceRoot, targetFile]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      if (!serviceRoot.trim() || !targetFile.trim() || !exportName.trim()) {
+        setSignatures([]);
+        setSignatureError(null);
+        return;
+      }
+      setSignatureLoading(true);
+      try {
+        const response = await fetch('/api/signature', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            serviceRoot,
+            targetFile,
+            exportName,
+            methodName
+          }),
+          signal: controller.signal
+        });
+        const result = (await response.json()) as SignatureResult & { error?: string };
+        if (!response.ok) {
+          throw new Error(result.error ?? `Signature lookup failed: ${response.status}`);
+        }
+        if (!controller.signal.aborted) {
+          setSignatures(result.signatures);
+          setSignatureError(null);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setSignatures([]);
+          setSignatureError(error instanceof Error ? error.message : String(error));
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setSignatureLoading(false);
+        }
+      }
+    }, 450);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [exportName, methodName, serviceRoot, targetFile]);
 
   function startVerticalResize(event: ReactPointerEvent<HTMLDivElement>) {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -374,10 +426,14 @@ export function App() {
                     />
                   </label>
                 </div>
-                <label className="args-field">
+                <div className="field args-field">
                   <span>Args JSON array</span>
-                  <textarea value={argsJson} onChange={(event) => setArgsJson(event.target.value)} spellCheck={false} />
-                </label>
+                  <ArgsEditor value={argsJson} onChange={setArgsJson} />
+                </div>
+                <div className="field signature-field">
+                  <span>Signature</span>
+                  <SignatureHint error={signatureError} loading={signatureLoading} signatures={signatures} />
+                </div>
                 <div className="method-actions">
                   <button className="inspect-button" disabled={inspecting || !serviceRoot.trim() || !targetFile.trim()} onClick={inspectTarget} type="button">
                     {inspecting ? 'Inspecting...' : 'Inspect'}

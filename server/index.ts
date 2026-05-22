@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { executeRoute } from './routes/execute.js';
 import { inspectRoute } from './routes/inspect.js';
+import { signatureRoute } from './routes/signature.js';
 import { suggestRoute } from './routes/suggest.js';
 
 const app = new Hono();
@@ -17,6 +18,7 @@ const distRoot = path.resolve(__dirname, '../../dist');
 app.use(logger());
 app.route('/api', executeRoute);
 app.route('/api', inspectRoute);
+app.route('/api', signatureRoute);
 app.route('/api', suggestRoute);
 app.use('/assets/*', serveStatic({ root: distRoot }));
 app.get('/favicon.svg', serveStatic({ path: path.join(distRoot, 'favicon.svg') }));

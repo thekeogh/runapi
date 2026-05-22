@@ -48,3 +48,23 @@ export type InspectExport = {
 export type SuggestResult = {
   suggestions: string[];
 };
+
+export type TypeProperty = {
+  name: string;
+  optional: boolean;
+  type: string;
+  properties?: TypeProperty[];
+};
+
+export type SignatureParam = TypeProperty;
+
+export type SignatureInfo = {
+  label: string;
+  params: SignatureParam[];
+  returnType: string;
+  returnProperties?: TypeProperty[];
+};
+
+export type SignatureResult = {
+  signatures: SignatureInfo[];
+};
