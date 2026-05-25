@@ -61,6 +61,7 @@ export type SignatureParam = TypeProperty;
 export type SignatureInfo = {
   label: string;
   params: SignatureParam[];
+  returnIsArray: boolean;
   returnType: string;
   returnProperties?: TypeProperty[];
 };

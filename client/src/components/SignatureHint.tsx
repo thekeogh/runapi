@@ -34,12 +34,12 @@ function renderInput(signature: SignatureInfo): string {
 
 function renderOutput(signature: SignatureInfo): string {
   if (!signature.returnProperties?.length) {
-    return `{\n  returns: ${signature.returnType}\n}`;
+    return signature.returnType;
   }
   return [
     '{',
     ...renderProperties(signature.returnProperties),
-    '}'
+    `}${signature.returnIsArray ? '[]' : ''}`
   ].join('\n');
 }
 

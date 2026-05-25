@@ -28,6 +28,7 @@ type SignatureParam = {
 type SignatureInfo = {
   label: string;
   params: SignatureParam[];
+  returnIsArray: boolean;
   returnType: string;
   returnProperties?: TypeProperty[];
 };
@@ -37,7 +38,7 @@ const typeFormatFlags =
   ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope |
   ts.TypeFormatFlags.WriteArrayAsGenericType;
 
-function loadProgram(serviceRoot: string): { checker: ts.TypeChecker; program: ts.Program } {
+function loadProgram(serviceRoot: string, extraFile?: string): { checker: ts.TypeChecker; program: ts.Program } {
   const configPath = ts.findConfigFile(serviceRoot, ts.sys.fileExists, 'tsconfig.json');
   if (!configPath) {
     throw new Error(`No tsconfig.json found from ${serviceRoot}`);
@@ -56,8 +57,12 @@ function loadProgram(serviceRoot: string): { checker: ts.TypeChecker; program: t
     configPath
   );
 
+  const rootNames = extraFile && !parsed.fileNames.includes(extraFile)
+    ? [...parsed.fileNames, extraFile]
+    : parsed.fileNames;
+
   const program = ts.createProgram({
-    rootNames: parsed.fileNames,
+    rootNames,
     options: parsed.options
   });
 
@@ -151,6 +156,24 @@ function resolvedReturnType(checker: ts.TypeChecker, type: ts.Type): ts.Type {
   return checker.getAwaitedType(type) ?? type;
 }
 
+function displayReturnType(checker: ts.TypeChecker, type: ts.Type): { isArray: boolean; type: ts.Type } {
+  const awaited = resolvedReturnType(checker, type);
+  if (checker.isArrayType(awaited)) {
+    return {
+      isArray: true,
+      type: checker.getTypeArguments(awaited as ts.TypeReference)[0] ?? awaited
+    };
+  }
+  if (checker.isTupleType(awaited)) {
+    const elementTypes = checker.getTypeArguments(awaited as ts.TypeReference);
+    return {
+      isArray: true,
+      type: elementTypes.length === 1 ? elementTypes[0]! : awaited
+    };
+  }
+  return { isArray: false, type: awaited };
+}
+
 function findExportSymbol(checker: ts.TypeChecker, sourceFile: ts.SourceFile, exportName: string): ts.Symbol | undefined {
   const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
   const exports = moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : [];
@@ -178,7 +201,7 @@ function inspectSignature(body: SignatureBody): { signatures: SignatureInfo[] } 
   if (!exportName.trim()) throw new Error('Enter an export first.');
 
   const absoluteFile = path.isAbsolute(targetFile) ? targetFile : path.resolve(serviceRoot, targetFile);
-  const { checker, program } = loadProgram(serviceRoot);
+  const { checker, program } = loadProgram(serviceRoot, absoluteFile);
   const sourceFile = program.getSourceFile(absoluteFile);
   if (!sourceFile) {
     throw new Error(`File is not part of the TypeScript program: ${absoluteFile}`);
@@ -215,13 +238,14 @@ function inspectSignature(body: SignatureBody): { signatures: SignatureInfo[] } 
         };
       });
       const returnType = signature.getReturnType();
-      const awaitedReturnType = resolvedReturnType(checker, returnType);
+      const displayType = displayReturnType(checker, returnType);
 
       return {
         label: signatureLabel(signature, checker, declaration, methodName || exportName),
         params,
+        returnIsArray: displayType.isArray,
         returnType: typeToString(checker, returnType, declaration),
-        returnProperties: describeType(checker, awaitedReturnType, declaration)
+        returnProperties: describeType(checker, displayType.type, declaration)
       };
     })
   };
