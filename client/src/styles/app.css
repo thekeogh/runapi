@@ -210,7 +210,8 @@ button {
   color: #07121a;
 }
 
-.clear-memory-button {
+.clear-memory-button,
+.icon-action-button {
   width: 50px;
   height: 50px;
   display: grid;
@@ -222,7 +223,8 @@ button {
   cursor: pointer;
 }
 
-.clear-memory-button:hover {
+.clear-memory-button:hover,
+.icon-action-button:hover {
   color: var(--accent);
   background: #242c3d;
 }
@@ -756,6 +758,13 @@ pre {
 
 .ready-status svg {
   color: #8ea0bb;
+}
+
+.updated-status {
+  padding-left: 10px;
+  margin-left: 4px;
+  border-left: 1px solid #332d4a;
+  color: #768398;
 }
 
 .status-dot {

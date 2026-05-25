@@ -49,6 +49,11 @@ export type SuggestResult = {
   suggestions: string[];
 };
 
+export type FileStateResult = {
+  exists: boolean;
+  mtimeMs: number | null;
+};
+
 export type TypeProperty = {
   name: string;
   optional: boolean;

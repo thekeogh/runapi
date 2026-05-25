@@ -9,7 +9,7 @@ import { SignatureHint } from './components/SignatureHint';
 import { TopPane } from './components/TopPane';
 import { postJson } from './lib/api';
 import { executeInNode } from './lib/executeInNode';
-import type { EnvMode, InspectExport, LogEntry, RunEvent, RunnerMode, RunState, SignatureInfo, SignatureResult, SuggestResult } from './lib/types';
+import type { EnvMode, FileStateResult, InspectExport, LogEntry, RunEvent, RunnerMode, RunState, SignatureInfo, SignatureResult, SuggestResult } from './lib/types';
 
 const billingRoot = '/Users/keogh/Sites/screencloud/billing/beta/pulse-backend-keogh/services/billing';
 
@@ -69,6 +69,32 @@ function eventToLog(event: RunEvent): LogEntry | null {
   return null;
 }
 
+function formatLastUpdated(timestamp: number, now: number): string {
+  const elapsedSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
+  if (elapsedSeconds < 5) return 'Just now';
+  if (elapsedSeconds < 60) return `${elapsedSeconds} seconds ago`;
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) {
+    return elapsedMinutes === 1 ? '1 minute ago' : `${elapsedMinutes} minutes ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return elapsedHours === 1 ? '1 hour ago' : `${elapsedHours} hours ago`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays <= 5) {
+    return elapsedDays === 1 ? '1 day ago' : `${elapsedDays} days ago`;
+  }
+
+  return new Date(timestamp).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
+}
+
 export function App() {
   const [serviceRoot, setServiceRoot] = useState(() => readStoredValue(storageKeys.serviceRoot, billingRoot));
   const [targetFile, setTargetFile] = useState(() => readStoredValue(storageKeys.targetFile, 'src/integrations/prismic/documents.ts'));
@@ -87,6 +113,10 @@ export function App() {
   const [signatures, setSignatures] = useState<SignatureInfo[]>([]);
   const [signatureError, setSignatureError] = useState<string | null>(null);
   const [signatureLoading, setSignatureLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  const fileMtimeRef = useRef<number | null>(null);
   const [editorWidth, setEditorWidth] = useState(58);
   const [resultTopHeight, setResultTopHeight] = useState(50);
   const workspaceRef = useRef<HTMLElement | null>(null);
@@ -100,7 +130,7 @@ export function App() {
 
   useEffect(() => {
     window.localStorage.setItem(storageKeys.serviceRoot, serviceRoot);
-  }, [serviceRoot]);
+  }, [refreshKey, serviceRoot]);
 
   useEffect(() => {
     window.localStorage.setItem(storageKeys.targetFile, targetFile);
@@ -129,6 +159,11 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem(storageKeys.envMode, envMode);
   }, [envMode]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -180,7 +215,7 @@ export function App() {
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [serviceRoot, targetFile]);
+  }, [refreshKey, serviceRoot, targetFile]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -210,7 +245,7 @@ export function App() {
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [envMode, serviceRoot, targetFile]);
+  }, [envMode, refreshKey, serviceRoot, targetFile]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -257,7 +292,41 @@ export function App() {
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [exportName, methodName, serviceRoot, targetFile]);
+  }, [exportName, methodName, refreshKey, serviceRoot, targetFile]);
+
+  useEffect(() => {
+    if (mode !== 'method' || !serviceRoot.trim() || !targetFile.trim()) {
+      fileMtimeRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkFile = async () => {
+      try {
+        const params = new URLSearchParams({ serviceRoot, targetFile });
+        const response = await fetch(`/api/state/file?${params.toString()}`);
+        const result = (await response.json()) as FileStateResult;
+        if (cancelled || !result.exists) return;
+        const previous = fileMtimeRef.current;
+        fileMtimeRef.current = result.mtimeMs;
+        if (previous !== null && result.mtimeMs !== previous) {
+          setLastUpdatedAt(Date.now());
+          setRefreshKey((current) => current + 1);
+        }
+      } catch {
+        // Polling is best-effort; manual refresh remains available.
+      }
+    };
+
+    void checkFile();
+    const interval = window.setInterval(checkFile, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [mode, serviceRoot, targetFile]);
 
   function startVerticalResize(event: ReactPointerEvent<HTMLDivElement>) {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -377,6 +446,11 @@ export function App() {
     setInspectError(null);
   }
 
+  function refreshFields() {
+    fileMtimeRef.current = null;
+    setRefreshKey((current) => current + 1);
+  }
+
   const selectedExport = inspectExports.find((item) => item.name === exportName);
 
   return (
@@ -387,6 +461,7 @@ export function App() {
         onClearSaved={clearSavedInput}
         onEnvModeChange={setEnvMode}
         onModeChange={setMode}
+        onRefresh={refreshFields}
         onServiceRootChange={setServiceRoot}
         serviceRoot={serviceRoot}
         serviceSuggestions={serviceSuggestions}
@@ -479,6 +554,7 @@ export function App() {
         <div className="ready-status">
           <Zap size={16} aria-hidden="true" />
           {runState.running ? 'Running' : 'Ready'}
+          <span className="updated-status">Updated {formatLastUpdated(lastUpdatedAt, now)}</span>
         </div>
       </footer>
     </div>

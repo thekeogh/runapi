@@ -1,4 +1,4 @@
-import { Braces, FileCode2, Folder, PackageSearch, Trash2 } from 'lucide-react';
+import { Braces, FileCode2, Folder, PackageSearch, RefreshCw, Trash2 } from 'lucide-react';
 import type { EnvMode, RunnerMode } from '../lib/types';
 import { AutocompleteInput } from './AutocompleteInput';
 
@@ -8,6 +8,7 @@ type TopPaneProps = {
   onClearSaved: () => void;
   onEnvModeChange: (mode: EnvMode) => void;
   onModeChange: (mode: RunnerMode) => void;
+  onRefresh: () => void;
   onServiceRootChange: (value: string) => void;
   serviceRoot: string;
   serviceSuggestions: string[];
@@ -19,6 +20,7 @@ export function TopPane({
   onClearSaved,
   onEnvModeChange,
   onModeChange,
+  onRefresh,
   onServiceRootChange,
   serviceRoot,
   serviceSuggestions
@@ -75,6 +77,10 @@ export function TopPane({
           <option value="test">.test</option>
           <option value="none">No env files</option>
         </select>
+        <button className="icon-action-button" onClick={onRefresh} title="Refresh files, exports, methods, and signature" type="button">
+          <RefreshCw size={18} aria-hidden="true" />
+          <span className="sr-only">Refresh files, exports, methods, and signature</span>
+        </button>
         <button className="clear-memory-button" onClick={onClearSaved} title="Clear saved input" type="button">
           <Trash2 size={18} aria-hidden="true" />
           <span className="sr-only">Clear saved input</span>
