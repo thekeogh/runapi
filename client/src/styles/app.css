@@ -529,6 +529,37 @@ button {
   gap: 10px;
 }
 
+.return-toolbar {
+  min-width: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.return-stats {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.return-stat {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #303949;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #171f2d;
+  color: #aeb8c5;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .copy-return-button {
   width: 28px;
   height: 28px;

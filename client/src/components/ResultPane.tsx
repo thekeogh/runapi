@@ -12,6 +12,32 @@ type ResultPaneProps = {
   onResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
 };
 
+type ReturnStat = {
+  label: string;
+  value: string;
+};
+
+function plural(count: number, singular: string, pluralLabel = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : pluralLabel}`;
+}
+
+function getReturnStats(value: unknown, output: string): ReturnStat[] {
+  const stats: ReturnStat[] = [];
+
+  if (Array.isArray(value)) {
+    stats.push({ label: 'Items', value: plural(value.length, 'item') });
+  } else if (value !== null && typeof value === 'object') {
+    stats.push({ label: 'Keys', value: plural(Object.keys(value).length, 'key') });
+  }
+
+  const lineCount = output.split('\n').length;
+  if (lineCount > 1 && stats.length > 0) {
+    stats.push({ label: 'Lines', value: plural(lineCount, 'line') });
+  }
+
+  return stats;
+}
+
 function configureReturnEditor(monaco: Monaco) {
   monaco.editor.defineTheme('runapi-return', {
     base: 'vs-dark',
@@ -81,6 +107,7 @@ function ReturnViewer({ value }: { value: unknown }) {
 export function ResultPane({ logs, returnValue, hasReturn, onResizeStart }: ResultPaneProps) {
   const [copied, setCopied] = useState(false);
   const returnText = hasReturn ? displayValue(returnValue) : '';
+  const returnStats = hasReturn ? getReturnStats(returnValue, returnText) : [];
 
   async function copyReturnValue() {
     if (!hasReturn) return;
@@ -117,16 +144,27 @@ export function ResultPane({ logs, returnValue, hasReturn, onResizeStart }: Resu
             <CornerDownRight size={18} aria-hidden="true" />
             <span>Return</span>
           </div>
-          <button
-            className="copy-return-button"
-            disabled={!hasReturn}
-            onClick={copyReturnValue}
-            title={hasReturn ? 'Copy return value' : 'No return value to copy'}
-            type="button"
-          >
-            {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-            <span className="sr-only">{copied ? 'Copied return value' : 'Copy return value'}</span>
-          </button>
+          <div className="return-toolbar">
+            {returnStats.length > 0 ? (
+              <div className="return-stats" aria-label="Return stats">
+                {returnStats.map((stat) => (
+                  <span className="return-stat" key={stat.label} title={stat.label}>
+                    {stat.value}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <button
+              className="copy-return-button"
+              disabled={!hasReturn}
+              onClick={copyReturnValue}
+              title={hasReturn ? 'Copy return value' : 'No return value to copy'}
+              type="button"
+            >
+              {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+              <span className="sr-only">{copied ? 'Copied return value' : 'Copy return value'}</span>
+            </button>
+          </div>
         </div>
         {hasReturn ? <ReturnViewer value={returnValue} /> : <div className="empty-state">No return value yet</div>}
       </div>
