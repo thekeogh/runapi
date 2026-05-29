@@ -617,11 +617,16 @@ button {
 }
 
 .log-list,
-.return-section > pre,
+.return-editor,
 .return-section > .empty-state {
   min-height: 0;
   overflow: auto;
   padding: 18px;
+}
+
+.return-editor {
+  overflow: hidden;
+  padding: 0;
 }
 
 .log-list {
@@ -671,36 +676,6 @@ pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-family: 'JetBrains Mono', monospace;
-}
-
-.return-section pre {
-  color: #c8ced8;
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.syntax-output {
-  color: #c8ced8;
-}
-
-.syntax-key {
-  color: #8ea0bb;
-}
-
-.syntax-string {
-  color: #ffd447;
-}
-
-.syntax-number {
-  color: #f59f54;
-}
-
-.syntax-boolean {
-  color: #a78bfa;
-}
-
-.syntax-null {
-  color: #6bdcff;
 }
 
 .empty-state {

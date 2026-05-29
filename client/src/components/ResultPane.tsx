@@ -1,5 +1,6 @@
-import type { PointerEvent, ReactNode } from 'react';
+import type { PointerEvent } from 'react';
 import { useState } from 'react';
+import Editor, { type Monaco } from '@monaco-editor/react';
 import { Check, Copy, CornerDownRight, Terminal } from 'lucide-react';
 import { displayValue } from '../lib/format';
 import type { LogEntry } from '../lib/types';
@@ -11,42 +12,70 @@ type ResultPaneProps = {
   onResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
 };
 
-function HighlightedReturn({ value }: { value: unknown }) {
-  const output = displayValue(value);
-  const tokenPattern =
-    /("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|\b(true|false)\b|\b(null|undefined)\b|(-?\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b)/gi;
-  const parts: ReactNode[] = [];
-  let lastIndex = 0;
-
-  for (const match of output.matchAll(tokenPattern)) {
-    const index = match.index ?? 0;
-    if (index > lastIndex) {
-      parts.push(output.slice(lastIndex, index));
+function configureReturnEditor(monaco: Monaco) {
+  monaco.editor.defineTheme('runapi-return', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [
+      { token: 'string.key.json', foreground: 'c4b5fd' },
+      { token: 'string.value.json', foreground: 'd9f7a5' },
+      { token: 'number.json', foreground: 'f5b642' },
+      { token: 'keyword.json', foreground: '9fa8ff' },
+      { token: 'delimiter.bracket.json', foreground: 'b76cff' }
+    ],
+    colors: {
+      'editor.background': '#101722',
+      'editor.foreground': '#dbe3ef',
+      'editorLineNumber.foreground': '#5b6470',
+      'editorLineNumber.activeForeground': '#aeb8c5',
+      'editor.selectionBackground': '#312a52',
+      'editor.inactiveSelectionBackground': '#241f3a'
     }
+  } as Parameters<typeof monaco.editor.defineTheme>[1]);
+}
 
-    const className = match[1]
-      ? 'syntax-key'
-      : match[2]
-        ? 'syntax-string'
-        : match[3]
-          ? 'syntax-boolean'
-          : match[4]
-            ? 'syntax-null'
-            : 'syntax-number';
-
-    parts.push(
-      <span className={className} key={`${index}-${match[0]}`}>
-        {match[0]}
-      </span>
-    );
-    lastIndex = index + match[0].length;
+function getReturnLanguage(output: string) {
+  try {
+    JSON.parse(output);
+    return 'json';
+  } catch {
+    return 'plaintext';
   }
+}
 
-  if (lastIndex < output.length) {
-    parts.push(output.slice(lastIndex));
-  }
+function ReturnViewer({ value }: { value: unknown }) {
+  const output = displayValue(value);
 
-  return <pre className="syntax-output">{parts}</pre>;
+  return (
+    <div className="return-editor">
+      <Editor
+        beforeMount={configureReturnEditor}
+        language={getReturnLanguage(output)}
+        path="runapi-return.json"
+        theme="runapi-return"
+        value={output}
+        options={{
+          automaticLayout: true,
+          bracketPairColorization: { enabled: true },
+          domReadOnly: true,
+          fixedOverflowWidgets: true,
+          folding: true,
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 13,
+          glyphMargin: false,
+          lineDecorationsWidth: 8,
+          lineNumbers: 'on',
+          minimap: { enabled: false },
+          padding: { top: 14, bottom: 14 },
+          readOnly: true,
+          renderValidationDecorations: 'off',
+          scrollBeyondLastLine: false,
+          tabSize: 2,
+          wordWrap: 'on'
+        }}
+      />
+    </div>
+  );
 }
 
 export function ResultPane({ logs, returnValue, hasReturn, onResizeStart }: ResultPaneProps) {
@@ -99,7 +128,7 @@ export function ResultPane({ logs, returnValue, hasReturn, onResizeStart }: Resu
             <span className="sr-only">{copied ? 'Copied return value' : 'Copy return value'}</span>
           </button>
         </div>
-        {hasReturn ? <HighlightedReturn value={returnValue} /> : <div className="empty-state">No return value yet</div>}
+        {hasReturn ? <ReturnViewer value={returnValue} /> : <div className="empty-state">No return value yet</div>}
       </div>
     </section>
   );

@@ -9,7 +9,7 @@ import { SignatureHint } from './components/SignatureHint';
 import { TopPane } from './components/TopPane';
 import { postJson } from './lib/api';
 import { executeInNode } from './lib/executeInNode';
-import type { EnvMode, FileStateResult, InspectExport, LogEntry, RunEvent, RunnerMode, RunState, SignatureInfo, SignatureResult, SuggestResult } from './lib/types';
+import type { EnvMode, InspectExport, LogEntry, RunEvent, RunnerMode, RunState, SignatureInfo, SignatureResult, SuggestResult } from './lib/types';
 
 const billingRoot = '/Users/keogh/Sites/screencloud/billing/beta/pulse-backend-keogh/services/billing';
 
@@ -300,31 +300,27 @@ export function App() {
       return;
     }
 
-    let cancelled = false;
-
-    const checkFile = async () => {
-      try {
-        const params = new URLSearchParams({ serviceRoot, targetFile });
-        const response = await fetch(`/api/state/file?${params.toString()}`);
-        const result = (await response.json()) as FileStateResult;
-        if (cancelled || !result.exists) return;
-        const previous = fileMtimeRef.current;
-        fileMtimeRef.current = result.mtimeMs;
-        if (previous !== null && result.mtimeMs !== previous) {
-          setLastUpdatedAt(Date.now());
-          setRefreshKey((current) => current + 1);
-        }
-      } catch {
-        // Polling is best-effort; manual refresh remains available.
+    const params = new URLSearchParams({ serviceRoot, targetFile });
+    const source = new EventSource(`/api/state/file/watch?${params.toString()}`);
+    const handleState = (event: MessageEvent<string>, updateTimestamp: boolean) => {
+      const result = JSON.parse(event.data) as { exists: boolean; mtimeMs: number | null };
+      if (!result.exists) return;
+      const previous = fileMtimeRef.current;
+      fileMtimeRef.current = result.mtimeMs;
+      if (updateTimestamp && previous !== null && result.mtimeMs !== previous) {
+        setLastUpdatedAt(Date.now());
+        setRefreshKey((current) => current + 1);
       }
     };
 
-    void checkFile();
-    const interval = window.setInterval(checkFile, 1500);
+    source.addEventListener('ready', (event) => handleState(event as MessageEvent<string>, false));
+    source.addEventListener('change', (event) => handleState(event as MessageEvent<string>, true));
+    source.onerror = () => {
+      source.close();
+    };
 
     return () => {
-      cancelled = true;
-      window.clearInterval(interval);
+      source.close();
     };
   }, [mode, serviceRoot, targetFile]);
 

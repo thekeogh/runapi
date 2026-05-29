@@ -49,6 +49,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const send = (event) => process.stdout.write(JSON.stringify(event) + '\\n');
+const finish = (exitCode) => {
+  process.stdout.write('', () => process.exit(exitCode));
+};
 const seen = new WeakSet();
 const format = (value) => {
   if (value instanceof Error) {
@@ -110,9 +113,10 @@ try {
     value = Object.prototype.hasOwnProperty.call(userModule, 'default') ? userModule.default : undefined;
   }
   send({ type: 'return', value: format(value) });
+  finish(0);
 } catch (error) {
   send({ type: 'error', message: error?.message ?? String(error), stack: error?.stack });
-  process.exitCode = 1;
+  finish(1);
 }
 `;
 }
