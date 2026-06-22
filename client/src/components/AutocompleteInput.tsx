@@ -2,7 +2,9 @@ import { useState } from 'react';
 
 type AutocompleteInputProps = {
   className?: string;
+  keepOpenOnSelect?: (value: string) => boolean;
   onChange: (value: string) => void;
+  onSelect?: (value: string) => void;
   onFocus?: () => void;
   placeholder?: string;
   suggestions: string[];
@@ -11,7 +13,9 @@ type AutocompleteInputProps = {
 
 export function AutocompleteInput({
   className,
+  keepOpenOnSelect,
   onChange,
+  onSelect,
   onFocus,
   placeholder,
   suggestions,
@@ -22,8 +26,10 @@ export function AutocompleteInput({
   const visible = focused && suggestions.length > 0;
 
   function choose(suggestion: string) {
+    const keepOpen = keepOpenOnSelect?.(suggestion) ?? false;
     onChange(suggestion);
-    setFocused(false);
+    onSelect?.(suggestion);
+    setFocused(keepOpen);
     setActiveIndex(0);
   }
 

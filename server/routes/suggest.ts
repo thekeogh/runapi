@@ -42,27 +42,56 @@ async function serviceSuggestions(query: string): Promise<string[]> {
     .map((entry) => path.join(directory, entry.name));
 }
 
-async function walkFiles(baseRoot: string, currentRoot: string, query: string, results: string[]): Promise<void> {
-  if (results.length >= 80) return;
+function normalizeRelativePath(input: string): string {
+  return input.replace(/\\/g, '/').replace(/^\/+/, '');
+}
 
-  const entries = await readdir(currentRoot, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    if (results.length >= 80) return;
-    if (entry.isDirectory()) {
-      if (!ignoredDirs.has(entry.name)) {
-        await walkFiles(baseRoot, path.join(currentRoot, entry.name), query, results);
-      }
-      continue;
-    }
-    if (!entry.isFile()) continue;
-
-    const absolute = path.join(currentRoot, entry.name);
-    const relative = path.relative(baseRoot, absolute);
-    if (!sourceExtensions.has(path.extname(entry.name))) continue;
-    if (!query || relative.toLowerCase().includes(query)) {
-      results.push(relative);
-    }
+function splitFileQuery(query: string): { directory: string; basename: string } {
+  const normalized = normalizeRelativePath(query.trim());
+  if (!normalized || normalized.endsWith('/')) {
+    return { directory: normalized.replace(/\/+$/, ''), basename: '' };
   }
+
+  const slashIndex = normalized.lastIndexOf('/');
+  if (slashIndex === -1) {
+    return { directory: '', basename: normalized.toLowerCase() };
+  }
+
+  return {
+    directory: normalized.slice(0, slashIndex),
+    basename: normalized.slice(slashIndex + 1).toLowerCase()
+  };
+}
+
+function childSuggestion(directory: string, entryName: string, isDirectoryEntry: boolean): string {
+  const prefix = directory ? `${directory}/` : '';
+  return `${prefix}${entryName}${isDirectoryEntry ? '/' : ''}`;
+}
+
+async function fileSuggestions(serviceRoot: string, query: string): Promise<string[]> {
+  const { directory, basename } = splitFileQuery(query);
+  const absoluteDirectory = path.resolve(serviceRoot, directory);
+  const relativeDirectory = path.relative(serviceRoot, absoluteDirectory);
+
+  if (relativeDirectory.startsWith('..') || path.isAbsolute(relativeDirectory)) {
+    return [];
+  }
+
+  const entries = await readdir(absoluteDirectory, { withFileTypes: true }).catch(() => []);
+
+  return entries
+    .filter((entry) => {
+      if (entry.isDirectory()) return !ignoredDirs.has(entry.name);
+      if (!entry.isFile()) return false;
+      return sourceExtensions.has(path.extname(entry.name));
+    })
+    .filter((entry) => !basename || entry.name.toLowerCase().includes(basename))
+    .sort((first, second) => {
+      if (first.isDirectory() !== second.isDirectory()) return first.isDirectory() ? -1 : 1;
+      return first.name.localeCompare(second.name);
+    })
+    .slice(0, 60)
+    .map((entry) => childSuggestion(directory, entry.name, entry.isDirectory()));
 }
 
 suggestRoute.get('/suggest/services', async (c) => {
@@ -72,13 +101,11 @@ suggestRoute.get('/suggest/services', async (c) => {
 
 suggestRoute.get('/suggest/files', async (c) => {
   const serviceRoot = path.resolve(c.req.query('serviceRoot') ?? '');
-  const query = (c.req.query('q') ?? '').trim().toLowerCase();
+  const query = c.req.query('q') ?? '';
 
   if (!serviceRoot || !(await isDirectory(serviceRoot))) {
     return c.json({ suggestions: [] });
   }
 
-  const results: string[] = [];
-  await walkFiles(serviceRoot, serviceRoot, query, results);
-  return c.json({ suggestions: results.slice(0, 60) });
+  return c.json({ suggestions: await fileSuggestions(serviceRoot, query) });
 });

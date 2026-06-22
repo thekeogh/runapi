@@ -1,6 +1,6 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileSearch, Play, Zap } from 'lucide-react';
+import { FileSearch, Play, Sparkles, Zap } from 'lucide-react';
 import { ArgsEditor } from './components/ArgsEditor';
 import { AutocompleteInput } from './components/AutocompleteInput';
 import { EditorPane } from './components/EditorPane';
@@ -113,6 +113,7 @@ export function App() {
   const [signatures, setSignatures] = useState<SignatureInfo[]>([]);
   const [signatureError, setSignatureError] = useState<string | null>(null);
   const [signatureLoading, setSignatureLoading] = useState(false);
+  const [fakeArgsLoading, setFakeArgsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
@@ -442,6 +443,24 @@ export function App() {
     setInspectError(null);
   }
 
+  async function fakeArgsFromSignature() {
+    const signature = signatures[0];
+    if (!signature) return;
+    setFakeArgsLoading(true);
+    try {
+      const { generateArgsJson } = await import('./lib/fakeArgs');
+      setArgsJson(generateArgsJson(signature));
+    } finally {
+      setFakeArgsLoading(false);
+    }
+  }
+
+  function handleTargetFileSelect(value: string) {
+    if (value.endsWith('/')) {
+      setFileSuggestions([]);
+    }
+  }
+
   function refreshFields() {
     fileMtimeRef.current = null;
     setRefreshKey((current) => current + 1);
@@ -477,7 +496,13 @@ export function App() {
               <div className="method-form">
                 <label>
                   <span>File</span>
-                  <AutocompleteInput value={targetFile} onChange={setTargetFile} suggestions={fileSuggestions} />
+                  <AutocompleteInput
+                    keepOpenOnSelect={(value) => value.endsWith('/')}
+                    onChange={setTargetFile}
+                    onSelect={handleTargetFileSelect}
+                    suggestions={fileSuggestions}
+                    value={targetFile}
+                  />
                 </label>
                 <div className="inline-fields">
                   <label>
@@ -500,6 +525,18 @@ export function App() {
                 <div className="field args-field">
                   <span>Args JSON array</span>
                   <ArgsEditor value={argsJson} onChange={setArgsJson} />
+                </div>
+                <div className="args-tools">
+                  <button
+                    className="fake-args-button"
+                    disabled={fakeArgsLoading || signatureLoading || signatures.length === 0}
+                    onClick={fakeArgsFromSignature}
+                    title={signatures.length > 0 ? 'Generate fake args from the loaded signature' : 'Load a signature before generating fake args'}
+                    type="button"
+                  >
+                    <Sparkles size={15} aria-hidden="true" />
+                    <span>{fakeArgsLoading ? 'Faking...' : 'Fake args'}</span>
+                  </button>
                 </div>
                 <div className="field signature-field">
                   <span>Signature</span>
