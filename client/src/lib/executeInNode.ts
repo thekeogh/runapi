@@ -1,5 +1,18 @@
 import type { ExecuteRequest, RunEvent } from './types';
 
+function parseRunEvent(line: string): RunEvent {
+  try {
+    const value = JSON.parse(line) as Partial<RunEvent>;
+    if (value && typeof value === 'object' && typeof value.type === 'string') {
+      return value as RunEvent;
+    }
+  } catch {
+    // Fall through to plain stdout handling.
+  }
+
+  return { type: 'console', level: 'log', values: [line] };
+}
+
 export async function executeInNode(
   request: ExecuteRequest,
   emit: (event: RunEvent) => void
@@ -28,11 +41,11 @@ export async function executeInNode(
 
     for (const line of lines) {
       if (!line.trim()) continue;
-      emit(JSON.parse(line) as RunEvent);
+      emit(parseRunEvent(line));
     }
   }
 
   if (buffer.trim()) {
-    emit(JSON.parse(buffer) as RunEvent);
+    emit(parseRunEvent(buffer));
   }
 }

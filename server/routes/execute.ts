@@ -48,10 +48,29 @@ function runnerSource(input: Required<Pick<ExecuteBody, 'mode' | 'serviceRoot'>>
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const send = (event) => process.stdout.write(JSON.stringify(event) + '\\n');
+const rawStdoutWrite = process.stdout.write.bind(process.stdout);
+const rawStderrWrite = process.stderr.write.bind(process.stderr);
+const send = (event) => rawStdoutWrite(JSON.stringify(event) + '\\n');
 const finish = (exitCode) => {
-  process.stdout.write('', () => process.exit(exitCode));
+  rawStdoutWrite('', () => process.exit(exitCode));
 };
+const writeDirectOutput = (level, chunk, encoding, callback) => {
+  const text = Buffer.isBuffer(chunk)
+    ? chunk.toString(typeof encoding === 'string' ? encoding : undefined)
+    : String(chunk);
+  const message = text.replace(/\\n$/, '');
+  if (message) {
+    send({ type: 'console', level, values: [message] });
+  }
+  if (typeof encoding === 'function') {
+    encoding();
+  } else if (typeof callback === 'function') {
+    callback();
+  }
+  return true;
+};
+process.stdout.write = (chunk, encoding, callback) => writeDirectOutput('log', chunk, encoding, callback);
+process.stderr.write = (chunk, encoding, callback) => writeDirectOutput('error', chunk, encoding, callback);
 const seen = new WeakSet();
 const format = (value) => {
   if (value instanceof Error) {
