@@ -30,9 +30,21 @@ const storageKeys = {
   targetFile: 'runapi:targetFile'
 } as const;
 
+const layoutStorageKeys = {
+  argsPanelHeight: 'runapi:layout:argsPanelHeight',
+  editorWidth: 'runapi:layout:editorWidth',
+  resultTopHeight: 'runapi:layout:resultTopHeight'
+} as const;
+
 function readStoredValue(key: string, fallback: string) {
   if (typeof window === 'undefined') return fallback;
   return window.localStorage.getItem(key) ?? fallback;
+}
+
+function readStoredNumber(key: string, fallback: number, min: number, max: number) {
+  const value = Number(readStoredValue(key, String(fallback)));
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
 }
 
 function readStoredMode(): RunnerMode {
@@ -118,10 +130,12 @@ export function App() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const fileMtimeRef = useRef<number | null>(null);
-  const [editorWidth, setEditorWidth] = useState(58);
-  const [resultTopHeight, setResultTopHeight] = useState(50);
+  const [editorWidth, setEditorWidth] = useState(() => readStoredNumber(layoutStorageKeys.editorWidth, 58, 35, 75));
+  const [resultTopHeight, setResultTopHeight] = useState(() => readStoredNumber(layoutStorageKeys.resultTopHeight, 50, 22, 78));
+  const [argsPanelHeight, setArgsPanelHeight] = useState(() => readStoredNumber(layoutStorageKeys.argsPanelHeight, 60, 28, 82));
   const workspaceRef = useRef<HTMLElement | null>(null);
   const resultRef = useRef<HTMLDivElement | null>(null);
+  const argsSignatureRef = useRef<HTMLDivElement | null>(null);
   const canRun = useMemo(() => {
     if (runState.running) return false;
     if (!serviceRoot.trim()) return false;
@@ -160,6 +174,18 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem(storageKeys.envMode, envMode);
   }, [envMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(layoutStorageKeys.editorWidth, String(editorWidth));
+  }, [editorWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem(layoutStorageKeys.resultTopHeight, String(resultTopHeight));
+  }, [resultTopHeight]);
+
+  useEffect(() => {
+    window.localStorage.setItem(layoutStorageKeys.argsPanelHeight, String(argsPanelHeight));
+  }, [argsPanelHeight]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -361,6 +387,24 @@ export function App() {
     window.addEventListener('pointerup', stop);
   }
 
+  function startArgsSignatureResize(event: ReactPointerEvent<HTMLDivElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const bounds = argsSignatureRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+
+    const move = (moveEvent: globalThis.PointerEvent) => {
+      const percent = ((moveEvent.clientY - bounds.top) / bounds.height) * 100;
+      setArgsPanelHeight(Math.min(82, Math.max(28, percent)));
+    };
+    const stop = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+  }
+
   async function inspectTarget() {
     if (!serviceRoot.trim() || !targetFile.trim()) return;
 
@@ -466,6 +510,15 @@ export function App() {
     setRefreshKey((current) => current + 1);
   }
 
+  function resetLayoutSizes() {
+    for (const value of Object.values(layoutStorageKeys)) {
+      window.localStorage.removeItem(value);
+    }
+    setEditorWidth(58);
+    setResultTopHeight(50);
+    setArgsPanelHeight(60);
+  }
+
   const selectedExport = inspectExports.find((item) => item.name === exportName);
 
   return (
@@ -477,6 +530,7 @@ export function App() {
         onEnvModeChange={setEnvMode}
         onModeChange={setMode}
         onRefresh={refreshFields}
+        onResetLayout={resetLayoutSizes}
         onServiceRootChange={setServiceRoot}
         serviceRoot={serviceRoot}
         serviceSuggestions={serviceSuggestions}
@@ -522,25 +576,32 @@ export function App() {
                     />
                   </label>
                 </div>
-                <div className="field args-field">
-                  <span>Args JSON array</span>
-                  <ArgsEditor value={argsJson} onChange={setArgsJson} />
-                </div>
-                <div className="args-tools">
-                  <button
-                    className="fake-args-button"
-                    disabled={fakeArgsLoading || signatureLoading || signatures.length === 0}
-                    onClick={fakeArgsFromSignature}
-                    title={signatures.length > 0 ? 'Generate fake args from the loaded signature' : 'Load a signature before generating fake args'}
-                    type="button"
-                  >
-                    <Sparkles size={15} aria-hidden="true" />
-                    <span>{fakeArgsLoading ? 'Faking...' : 'Fake args'}</span>
-                  </button>
-                </div>
-                <div className="field signature-field">
-                  <span>Signature</span>
-                  <SignatureHint error={signatureError} loading={signatureLoading} signatures={signatures} />
+                <div
+                  className="args-signature-stack"
+                  ref={argsSignatureRef}
+                  style={{ '--args-panel-height': `${argsPanelHeight}%` } as CSSProperties}
+                >
+                  <div className="field args-field">
+                    <span>Args JSON array</span>
+                    <ArgsEditor value={argsJson} onChange={setArgsJson} />
+                  </div>
+                  <div className="args-signature-divider" onPointerDown={startArgsSignatureResize} role="separator" aria-orientation="horizontal" />
+                  <div className="args-tools">
+                    <button
+                      className="fake-args-button"
+                      disabled={fakeArgsLoading || signatureLoading || signatures.length === 0}
+                      onClick={fakeArgsFromSignature}
+                      title={signatures.length > 0 ? 'Generate fake args from the loaded signature' : 'Load a signature before generating fake args'}
+                      type="button"
+                    >
+                      <Sparkles size={15} aria-hidden="true" />
+                      <span>{fakeArgsLoading ? 'Faking...' : 'Fake args'}</span>
+                    </button>
+                  </div>
+                  <div className="field signature-field">
+                    <span>Signature</span>
+                    <SignatureHint error={signatureError} loading={signatureLoading} signatures={signatures} />
+                  </div>
                 </div>
                 <div className="method-actions">
                   <button className="inspect-button" disabled={inspecting || !serviceRoot.trim() || !targetFile.trim()} onClick={inspectTarget} type="button">
