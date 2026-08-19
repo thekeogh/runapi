@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 export const inspectRoute = new Hono();
 
@@ -11,6 +12,10 @@ type InspectBody = {
   serviceRoot?: string;
   targetFile?: string;
 };
+
+type MethodAccess = 'public' | 'private' | 'protected';
+
+type StaticAccessMap = Record<string, Record<string, MethodAccess>>;
 
 function envArgs(envMode: InspectBody['envMode']): string[] {
   if (envMode === 'none') return [];
@@ -33,8 +38,84 @@ function targetUrl(serviceRoot: string, targetFile: string): string {
   return pathToFileURL(filePath).href;
 }
 
-function runnerSource(fileUrl: string): string {
+function methodName(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+  return null;
+}
+
+function memberAccess(member: ts.ClassElement): MethodAccess {
+  const modifiers = ts.canHaveModifiers(member) ? ts.getModifiers(member) ?? [] : [];
+  if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword)) return 'private';
+  if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ProtectedKeyword)) return 'protected';
+  return 'public';
+}
+
+function classMethodAccess(classDeclaration: ts.ClassDeclaration): Record<string, MethodAccess> {
+  const methods: Record<string, MethodAccess> = {};
+  for (const member of classDeclaration.members) {
+    if (!ts.isMethodDeclaration(member) && !ts.isGetAccessorDeclaration(member) && !ts.isSetAccessorDeclaration(member)) {
+      continue;
+    }
+    const name = methodName(member.name);
+    if (name) methods[name] = memberAccess(member);
+  }
+  return methods;
+}
+
+function exportedName(name: ts.BindingName): string | null {
+  return ts.isIdentifier(name) ? name.text : null;
+}
+
+function isExported(node: ts.Node): boolean {
+  return Boolean(ts.canHaveModifiers(node) && ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
+}
+
+function classNameFromInitializer(initializer: ts.Expression): string | null {
+  if (ts.isNewExpression(initializer) && ts.isIdentifier(initializer.expression)) {
+    return initializer.expression.text;
+  }
+  return null;
+}
+
+async function staticAccessMap(filePath: string): Promise<StaticAccessMap> {
+  const sourceText = await readFile(filePath, 'utf8').catch(() => '');
+  if (!sourceText) return {};
+
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const classes = new Map<string, Record<string, MethodAccess>>();
+  const exports: StaticAccessMap = {};
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isClassDeclaration(statement) && statement.name) {
+      const access = classMethodAccess(statement);
+      classes.set(statement.name.text, access);
+      if (isExported(statement)) {
+        exports[statement.name.text] = access;
+      }
+    }
+  }
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement) || !isExported(statement)) continue;
+
+    for (const declaration of statement.declarationList.declarations) {
+      const exportName = exportedName(declaration.name);
+      if (!exportName || !declaration.initializer) continue;
+      const className = classNameFromInitializer(declaration.initializer);
+      if (className && classes.has(className)) {
+        exports[exportName] = classes.get(className)!;
+      }
+    }
+  }
+
+  return exports;
+}
+
+function runnerSource(fileUrl: string, accessMap: StaticAccessMap): string {
   return `
+const accessMap = ${JSON.stringify(accessMap)};
 try {
   const module = await import(${JSON.stringify(fileUrl)});
   const exports = Object.entries(module).map(([name, value]) => {
@@ -46,7 +127,14 @@ try {
       }
       methods.push(...Object.keys(value).filter((key) => typeof value[key] === 'function'));
     }
-    return { name, type: typeof value, methods: [...new Set(methods)].sort() };
+    return {
+      name,
+      type: typeof value,
+      methods: [...new Set(methods)].sort().map((methodName) => ({
+        name: methodName,
+        access: accessMap[name]?.[methodName] ?? 'public'
+      }))
+    };
   });
   process.stdout.write(JSON.stringify({ exports }));
 } catch (error) {
@@ -68,7 +156,8 @@ inspectRoute.post('/inspect', async (c) => {
     return c.json({ error: 'Enter a target file first.' }, 400);
   }
 
-  const runnerPath = await writeTempRunner(runnerSource(targetUrl(serviceRoot, targetFile)));
+  const absoluteTarget = path.isAbsolute(targetFile) ? targetFile : path.resolve(serviceRoot, targetFile);
+  const runnerPath = await writeTempRunner(runnerSource(targetUrl(serviceRoot, targetFile), await staticAccessMap(absoluteTarget)));
   const result = await new Promise<{ stdout: string; stderr: string; exitCode: number | null }>((resolve) => {
     const child = spawn(process.execPath, [
       ...envArgs(body.envMode),

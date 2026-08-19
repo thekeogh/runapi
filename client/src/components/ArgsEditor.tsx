@@ -59,7 +59,7 @@ export function ArgsEditor({ onChange, value }: ArgsEditorProps) {
           automaticLayout: true,
           bracketPairColorization: { enabled: true },
           fixedOverflowWidgets: true,
-          folding: false,
+          folding: true,
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 14,
           formatOnPaste: true,
@@ -75,6 +75,7 @@ export function ArgsEditor({ onChange, value }: ArgsEditorProps) {
             strings: false
           },
           scrollBeyondLastLine: false,
+          stickyScroll: { enabled: false },
           tabSize: 2,
           wordWrap: 'on'
         }}

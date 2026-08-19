@@ -582,6 +582,11 @@ button {
   color: #f5f8fc;
 }
 
+.method-access-label {
+  color: #768398;
+  font-size: 12px;
+}
+
 .panel-header {
   height: 42px;
   display: flex;

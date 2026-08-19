@@ -42,7 +42,14 @@ export type ExecuteRequest = {
 export type InspectExport = {
   name: string;
   type: string;
-  methods: string[];
+  methods: Array<string | InspectMethod>;
+};
+
+export type MethodAccess = 'public' | 'private' | 'protected';
+
+export type InspectMethod = {
+  access: MethodAccess;
+  name: string;
 };
 
 export type SuggestResult = {

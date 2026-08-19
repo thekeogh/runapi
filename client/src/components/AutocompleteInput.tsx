@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 type AutocompleteInputProps = {
   className?: string;
@@ -7,6 +7,7 @@ type AutocompleteInputProps = {
   onSelect?: (value: string) => void;
   onFocus?: () => void;
   placeholder?: string;
+  renderSuggestion?: (value: string) => ReactNode;
   suggestions: string[];
   value: string;
 };
@@ -18,6 +19,7 @@ export function AutocompleteInput({
   onSelect,
   onFocus,
   placeholder,
+  renderSuggestion,
   suggestions,
   value
 }: AutocompleteInputProps) {
@@ -77,7 +79,7 @@ export function AutocompleteInput({
               onClick={() => choose(suggestion)}
               type="button"
             >
-              {suggestion}
+              {renderSuggestion ? renderSuggestion(suggestion) : suggestion}
             </button>
           ))}
         </div>

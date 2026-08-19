@@ -9,7 +9,7 @@ import { SignatureHint } from './components/SignatureHint';
 import { TopPane } from './components/TopPane';
 import { postJson } from './lib/api';
 import { executeInNode } from './lib/executeInNode';
-import type { EnvMode, InspectExport, LogEntry, RunEvent, RunnerMode, RunState, SignatureInfo, SignatureResult, SuggestResult } from './lib/types';
+import type { EnvMode, InspectExport, InspectMethod, LogEntry, RunEvent, RunnerMode, RunState, SignatureInfo, SignatureResult, SuggestResult } from './lib/types';
 
 const billingRoot = '/Users/keogh/Sites/screencloud/billing/beta/pulse-backend-keogh/services/billing';
 
@@ -105,6 +105,21 @@ function formatLastUpdated(timestamp: number, now: number): string {
     dateStyle: 'medium',
     timeStyle: 'short'
   });
+}
+
+function normalizeMethod(method: string | InspectMethod): InspectMethod {
+  return typeof method === 'string' ? { name: method, access: 'public' } : method;
+}
+
+function renderMethodSuggestion(method: string) {
+  const access = method.match(/\s\((private|protected)\)$/)?.[1];
+  if (!access) return method;
+  return (
+    <>
+      {method.replace(/\s\((private|protected)\)$/, '')}
+      <span className="method-access-label"> ({access})</span>
+    </>
+  );
 }
 
 export function App() {
@@ -520,6 +535,10 @@ export function App() {
   }
 
   const selectedExport = inspectExports.find((item) => item.name === exportName);
+  const methodSuggestions = (selectedExport?.methods ?? [])
+    .map(normalizeMethod)
+    .filter((item) => item.name.toLowerCase().includes(methodName.toLowerCase()) && item.name !== methodName)
+    .map((item) => item.access === 'public' ? item.name : `${item.name} (${item.access})`);
 
   return (
     <div className={`app-shell mode-${mode}`}>
@@ -571,8 +590,9 @@ export function App() {
                     <span>Method</span>
                     <AutocompleteInput
                       value={methodName}
-                      onChange={setMethodName}
-                      suggestions={(selectedExport?.methods ?? []).filter((item) => item.toLowerCase().includes(methodName.toLowerCase()) && item !== methodName)}
+                      onChange={(value) => setMethodName(value.replace(/\s\((private|protected)\)$/, ''))}
+                      renderSuggestion={renderMethodSuggestion}
+                      suggestions={methodSuggestions}
                     />
                   </label>
                 </div>
