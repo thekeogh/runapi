@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { childEnvironment, envArgs } from '../lib/environment.js';
 
 export const inspectRoute = new Hono();
 
@@ -16,12 +17,6 @@ type InspectBody = {
 type MethodAccess = 'public' | 'private' | 'protected';
 
 type StaticAccessMap = Record<string, Record<string, MethodAccess>>;
-
-function envArgs(envMode: InspectBody['envMode']): string[] {
-  if (envMode === 'none') return [];
-  if (envMode === 'test') return ['--env-file-if-exists=.test.env'];
-  return ['--env-file-if-exists=.local.env', '--env-file-if-exists=.override.env'];
-}
 
 async function writeTempRunner(content: string): Promise<string> {
   const projectDir = path.join(process.cwd(), '.codex', 'temp', 'runapi-inspect');
@@ -166,7 +161,7 @@ inspectRoute.post('/inspect', async (c) => {
       runnerPath
     ], {
       cwd: serviceRoot,
-      env: { ...process.env, NODE_NO_WARNINGS: '1' },
+      env: childEnvironment(body.envMode),
       stdio: ['ignore', 'pipe', 'pipe']
     });
     let stdout = '';

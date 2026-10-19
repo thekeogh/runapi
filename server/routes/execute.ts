@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { RunEvent } from '../lib/types.js';
+import { childEnvironment, envArgs } from '../lib/environment.js';
 
 export const executeRoute = new Hono();
 
@@ -30,14 +31,6 @@ function serviceFileUrl(serviceRoot: string, targetFile: string): string {
     ? targetFile
     : path.resolve(serviceRoot, targetFile);
   return pathToFileURL(filePath).href;
-}
-
-function envArgs(envMode: ExecuteBody['envMode']): string[] {
-  if (envMode === 'none') return [];
-  if (envMode === 'test') {
-    return ['--env-file-if-exists=.test.env'];
-  }
-  return ['--env-file-if-exists=.local.env', '--env-file-if-exists=.override.env'];
 }
 
 function runnerSource(input: Required<Pick<ExecuteBody, 'mode' | 'serviceRoot'>> & ExecuteBody): string {
@@ -207,7 +200,7 @@ executeRoute.post('/execute', async (c) => {
           runnerPath
         ], {
           cwd: serviceRoot,
-          env: { ...process.env, NODE_NO_WARNINGS: '1' },
+          env: childEnvironment(body.envMode),
           stdio: ['ignore', 'pipe', 'pipe']
         });
 

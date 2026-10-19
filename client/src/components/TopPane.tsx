@@ -75,8 +75,8 @@ export function TopPane({
           onChange={(event) => onEnvModeChange(event.target.value as EnvMode)}
           aria-label="Environment files"
         >
-          <option value="local">.local + .override</option>
-          <option value="test">.test</option>
+          <option value="local">Development / local</option>
+          <option value="test">Test</option>
           <option value="none">No env files</option>
         </select>
         <button className="icon-action-button" onClick={onRefresh} title="Refresh files, exports, methods, and signature" type="button">
